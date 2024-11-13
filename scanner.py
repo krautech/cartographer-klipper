@@ -2147,7 +2147,7 @@ class ScannerModel:
         domain = config.getfloatlist("model_domain", count=2)
         [min_z, max_z] = config.getfloatlist("model_range", count=2)
         offset = config.getfloat("model_offset", 0.0)
-        mode = config.get("model_mode", "scan")
+        mode = config.get("model_mode", "None")
         poly = Polynomial(coef, domain)
         return ScannerModel(name, scanner, poly, temp, min_z, max_z, mode, offset)
 
@@ -2640,11 +2640,13 @@ class ScannerEndstopWrapper:
         if self.scanner.model is None and self.scanner.trigger_method == 0:
             raise self.scanner.printer.command_error("No Scanner model loaded")
             
-        
-        if self.scanner.calibration_method == "scan" and self.scanner.model.mode == "touch":
-            raise self.scanner.printer.command_error("Scanner model is for touch yet you're in mode: scan. PROBE_SWITCH MODE=TOUCH to switch, alternatively recalibrate")
-        if self.scanner.calibration_method == "touch" and self.scanner.model.mode == "scan":
-            raise self.scanner.printer.command_error("Scanner model is for scan yet you're in mode: touch.  PROBE_SWITCH MODE=SCAN to switch, alternatively recalibrate.")
+        if self.scanner.model.mode == "None":
+            raise self.scanner.printer.command_error("No " + self.scanner.calibration_method + " model loaded. Please recalibrate using " + self.scanner.sensor_name + "_CALIBRATE")
+        else:
+            if self.scanner.calibration_method == "scan" and self.scanner.model.mode == "touch":
+                raise self.scanner.printer.command_error("Scanner model is for touch yet you're in mode: scan. PROBE_SWITCH MODE=TOUCH to switch, alternatively recalibrate")
+            if self.scanner.calibration_method == "touch" and self.scanner.model.mode == "scan":
+                raise self.scanner.printer.command_error("Scanner model is for scan yet you're in mode: touch.  PROBE_SWITCH MODE=SCAN to switch, alternatively recalibrate.")
             
         self.is_homing = True
         if self.scanner.trigger_method == 0:
