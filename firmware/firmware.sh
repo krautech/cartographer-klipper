@@ -77,7 +77,7 @@ printf "${BLUE}
   \____|  \__,_| |_|     \__|  \___/   \__, | |_|     \__,_| | .__/  |_| |_|  \___| |_|   
                                        |___/                 |_|                          
 ${NC}"
-printf "${RED}Firmware Script ${NC} v1.0.8\n"
+printf "${RED}Firmware Script ${NC} v1.1.0\n"
 printf "Created by ${GREEN}KrauTech${NC} ${BLUE}(https://github.com/krautech)${NC}\n"
 echo
 echo
@@ -200,10 +200,10 @@ menu(){
 	    3) initialChecks ; menu ;;
 	    4) checkUUID ; menu ;;
 		5) uuidLookup ; menu ;;
-		6) whichFlavor 1 $uuid; menu ;;
-		7) whichFlavor 1 $queryID; menu ;;
-		8) whichFlavor 2 $dfuID; menu ;;
-		9) whichFlavor 3 $usbID; menu ;;
+		6) flashFirmware 1 $uuid; menu ;;
+		7) flashFirmware 1 $queryID; menu ;;
+		8) flashFirmware 2 $dfuID; menu ;;
+		9) flashFirmware 3 $usbID; menu ;;
 		"lsusb") 
 		lsusb
 		read -p "Press enter to return to main menu"; menu ;;
@@ -491,31 +491,6 @@ checkUUID(){
 		read -p "Press enter to go back"
 	fi
 }
-whichFlavor(){
-	if [[ $ftype == "katapult" ]]; then
-		flashFirmware 2 $1
-	else
-		# Tap vs non tap
-		header;
-		echo "Do you want to include Survey Touch functionality, if unsure ask on discord (https://discord.gg/yzazQMEGS2)"
-		echo
-		echo -ne "\n	
-			$(ColorGreen '1)') with Survey Touch"
-		echo -ne "
-			$(ColorRed '2)') without Survey Touch\n
-			$(ColorRed '6)') Back"
-		echo -ne "\n	
-			$(ColorBlue 'Choose an option:') "
-		read a
-		COLUMNS=12
-		case $a in
-			1) flashFirmware 1 $1; menu ;;
-			2) flashFirmware 2 $1; menu ;;
-			6) menu ;;
-			*) echo -e $red"Wrong option."$clear;;
-		esac
-	fi
-}
 ###########################
 # Helper function to sort firmware files
 sort_firmware_files() {
@@ -577,12 +552,8 @@ flashFirmware(){
 
 		else
 			# Set directory based on parameter
-			if [[ $1 == 1 ]]; then
-				cd ~/cartographer-klipper/firmware/v2-v3/survey || exit
-			else
-				cd ~/cartographer-klipper/firmware/v2-v3/ || exit
-			fi
-
+			cd ~/cartographer-klipper/firmware/v2-v3/ || exit
+			
 			# Set search pattern based on bitrate
 			search_pattern="*${bitrate}*"
 
@@ -605,7 +576,7 @@ flashFirmware(){
 					break
 					;;
 				"Back")
-					whichFlavor
+					menu
 					break
 					;;
 				*)
@@ -647,11 +618,7 @@ flashFirmware(){
 
 		else
 			# Set directory based on parameter
-			if [[ $1 == 1 ]]; then
-				cd ~/cartographer-klipper/firmware/v2-v3/survey || exit
-			else
-				cd ~/cartographer-klipper/firmware/v2-v3/ || exit
-			fi
+			cd ~/cartographer-klipper/firmware/v2-v3/ || exit
 
 			# Set search pattern based on bitrate
 			search_pattern="*${bitrate}*"
@@ -675,7 +642,7 @@ flashFirmware(){
 					break
 					;;
 				"Back")
-					whichFlavor
+					menu
 					break
 					;;
 				*)
@@ -690,11 +657,7 @@ flashFirmware(){
 		cd ~/cartographer-klipper/
 		git pull > /dev/null 2>&1
 		cd ~/cartographer-klipper/firmware/v2-v3/combined-firmware
-		if [[ $1 == 1 ]]; then
-			findFiles="Full_Survey_*"
-		else
-			findFiles="Full_Cartographer_*"
-		fi
+		findFiles="Full_Survey_*"
 		DIRECTORY=.
 		unset options i
 		declare -A arr
@@ -709,7 +672,7 @@ flashFirmware(){
 					flashing $opt $1 "dfu";
 					;;
 				"Back")
-					whichFlavor ; break
+					menu ; break
 					;;
 				*)
 					echo "This is not a number"
@@ -748,12 +711,8 @@ flashFirmware(){
 
 		else
 			# Set directory based on parameter
-			if [[ $1 == 1 ]]; then
-				cd ~/cartographer-klipper/firmware/v2-v3/survey || exit
-			else
-				cd ~/cartographer-klipper/firmware/v2-v3/ || exit
-			fi
-
+			cd ~/cartographer-klipper/firmware/v2-v3/ || exit
+			
 			# Set search pattern based on USB
 			search_pattern="*USB*"
 
@@ -776,7 +735,7 @@ flashFirmware(){
 					break
 					;;
 				"Back")
-					whichFlavor
+					menu
 					break
 					;;
 				*)

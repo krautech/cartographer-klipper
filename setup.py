@@ -361,17 +361,10 @@ def add_probe_config(probe_type):
         print("\n" + "="*60)
         print(f" Debugging Output for add_probe_config ".center(60, "="))
         print("="*60 + "\n")
-        print(f"Adding configuration for probe type: {probe_type}")
+        print(f"Adding configuration for probe type: touch")
         
-        # Example configuration logic (to be implemented based on probe type)
-        if probe_type == "touch":
-            # Add touch probe specific configuration here
-            print("Configuring settings for touch probe...")
-        elif probe_type == "scan":
-            # Add scan probe specific configuration here
-            print("Configuring settings for scan probe...")
-        else:
-            print("Unknown probe type specified. Please choose 'touch' or 'scan'.")
+        print("Configuring settings for touch probe...")
+
     #backup_config_file()  # Backup the config file before editing
     
     with open(config_file_path, "r") as config_file:
@@ -381,7 +374,7 @@ def add_probe_config(probe_type):
     cartographer_exists = any(line.strip().startswith("[cartographer]") for line in lines)
 
     # Adding [scanner] section for touch probe type
-    if probe_type == "touch" and not scanner_exists and not cartographer_exists:
+    if not scanner_exists and not cartographer_exists:
         canbus_uuid = get_canbus_uuid()
 
         serial_entry = "#serial: /dev/serial/by-id/ # CHANGE ME FOR USB"
@@ -482,101 +475,6 @@ probe_points:
             config_file.writelines(lines)
 
         debug_print(f"[scanner] section added to printer.cfg successfully.")
-
-    # Adding [cartographer] section for scan probe type
-    elif probe_type == "scan" and not cartographer_exists and not scanner_exists:
-        canbus_uuid = get_canbus_uuid()
-
-        serial_entry = "#serial: /dev/serial/by-id/ # CHANGE ME FOR USB"
-        canbus_entry = "#canbus_uuid:  # CHANGE ME FOR CANBUS"
-        
-        if canbus_uuid and not check_canbus_in_log(canbus_uuid):
-            canbus_entry = f"canbus_uuid: {canbus_uuid}"
-        else:
-            serial_id = find_cartographer_serial_id()
-            if serial_id:
-                serial_entry = f"serial: {serial_id}"
-                canbus_entry = "#canbus_uuid: # CHANGE ME FOR CANBUS"
-
-        # Cartographer config lines
-        cartographer_config_lines = f"""
-[cartographer]
-{serial_entry}
-{canbus_entry}
-#
-#   Visit the link below for help finding your device ID
-#   https://docs.cartographer3d.com/cartographer-probe/installation-and-setup/classic-installation/klipper-setup#finding-the-serial-or-uuid
-#  
-x_offset: 0.0
-#    adjust for your cartographers offset from nozzle to middle of coil    
-y_offset: 21.1
-#    adjust for your cartographers offset from nozzle to middle of coil    
-#    Offsets are measured from the centre of your coil, to the tip of your nozzle 
-#    on a level axis. It is vital that this is accurate.     
-speed: 40.0
-lift_speed: 5.0
-backlash_comp: 0.5
-#   Backlash compensation distance for removing Z backlash before measuring
-#   the sensor response.
-mesh_runs: 2
-#   Number of passes to make during mesh scan.
-
-[temperature_sensor Cartographer_MCU]
-sensor_type:   temperature_mcu
-sensor_mcu:       cartographer
-min_temp:                    0
-max_temp:                  105
-"""
-
-        # Bed mesh section for scan probe type
-        bed_mesh_lines = f"""
-[bed_mesh]
-zero_reference_position: {x_mid}, {y_mid}
-#    set this to the middle of your bed    
-speed: 200
-#    movement speed of toolhead during bed mesh
-horizontal_move_z: 5
-#    height of scanner during bed mesh scan
-mesh_min: 50, 50
-#    start point of bed mesh [X, Y]
-mesh_max: {x_mesh_max}, {y_mesh_max}
-#    end point of bed mesh [X, Y]
-probe_count: 30, 30
-algorithm: bicubic
-"""
-
-        # Insert the cartographer and bed mesh config lines
-        insert_index = 0
-        for i, line in enumerate(lines):
-            if line.strip().startswith("[include"):
-                insert_index = i + 1
-
-        lines.insert(insert_index, cartographer_config_lines)
-        lines.insert(insert_index + 1, bed_mesh_lines)
-
-        # Adding [adxl345] and [resonance_tester] sections for scan probe type
-        adxl345_lines = f"""
-[adxl345]
-cs_pin: cartographer:PA3
-spi_bus: spi1
-"""
-
-        resonance_tester_lines = f"""
-[resonance_tester]
-accel_chip: adxl345
-probe_points:
-    {x_mid}, {y_mid}, 20
-"""
-
-        # Insert the adxl345 and resonance_tester config lines
-        lines.insert(insert_index + 2, adxl345_lines)
-        lines.insert(insert_index + 3, resonance_tester_lines)
-
-        # Write the updated lines back to the configuration file
-        with open(config_file_path, "w") as config_file:
-            config_file.writelines(lines)
-
-        debug_print(f"[cartographer] section added to printer.cfg successfully.")
     else:
         debug_print(f"No updates made: Configuration already exists.")
 # Function to update the [stepper_z] section
@@ -763,8 +661,6 @@ def find_uuid_lines_in_log(canbus_uuids):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Install probe configuration in printer.cfg')
-    parser.add_argument('--mode', choices=['scan', 'touch'], required=True,
-                        help='Mode to install configuration for (scan or touch)')
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode for detailed output')
 
@@ -805,15 +701,9 @@ if __name__ == "__main__":
         print("Your Klipper configuration in 'printer.cfg' has had the necessary settings for cartographer/scanner added and configured to your printer.\n")
         print("⚠️  Please double-check the configuration before proceeding by following the link below.\n")
         
-        # Mode-specific instructions
-        if args.mode == "touch":
-            print("🔗 Touch Mode Setup:")
-            print("   Please visit:")
-            print("   https://docs.cartographer3d.com/cartographer-probe/installation-and-setup/touch-installation/klipper-configuation")
-        else:
-            print("🔗 Scan Mode Setup:")
-            print("   Please visit:")
-            print("   https://docs.cartographer3d.com/cartographer-probe/installation-and-setup/classic-installation/klipper-configuration")
+        print("🔗 Touch Mode Setup:")
+        print("   Please visit:")
+        print("   https://docs.cartographer3d.com/cartographer-probe/installation-and-setup/klipper-configuation")
 
         print("\n" + "="*60)
         print(" End of Instructions ".center(60, "="))

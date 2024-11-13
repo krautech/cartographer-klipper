@@ -35,7 +35,7 @@ fi
 
 # update link to scanner.py, cartographer.py & idm.py
 echo "Cartographer: linking modules into klipper"
-for file in idm.py cartographer.py scanner.py; do
+for file in scanner.py; do
     if [ -e "${KDIR}/klippy/extras/${file}" ]; then
         rm "${KDIR}/klippy/extras/${file}"
     fi
