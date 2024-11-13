@@ -406,16 +406,10 @@ y_offset: 15
 backlash_comp: 0.5
 #   Backlash compensation distance for removing Z backlash before measuring
 #   the sensor response.
-calibration_method: touch
-#    leave this as touch unless you want to use scan only for everything. 
 sensor: cartographer
 #    this must be set as cartographer unless using IDM etc.
 sensor_alt: carto
-#    alternate name to call commands. CARTO_TOUCH etc
-scanner_touch_z_offset: 0.05 
-#    This is the default and will be overwritten and added to the DO NOT SAVE area by using UI to save z offset
-scanner_touch_max_retries: 10   
-#    Number of times touch will attempt to touch the bed.      
+#    alternate name to call commands. CARTO_TOUCH etc     
 mesh_runs: 2
 #    Number of mesh runs to complete a BED_MESH_CALIBRATE
 
