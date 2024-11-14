@@ -656,7 +656,7 @@ class Scanner:
              # Run start_touch_scan once and ignore the results
             gcmd.respond_info("Running initial touch scan (results ignored)...")
             touch_settings = TouchSettings(initial_position, homing_position, accel, speed, retract_dist, retract_speed, 1, tolerance, 1, z_max, max_accel, threshold_min, 0, randomize)
-            _ = self.start_touch_scan(gcmd, touch_settings, 0)  # Discard results
+            _ = self.start_threshold_scan(gcmd, touch_settings, 0)  # Discard results
             
             start_position = z_max
             
@@ -665,7 +665,7 @@ class Scanner:
                 self.detect_threshold_z = current_threshold
                 
                 touch_settings = TouchSettings(initial_position, homing_position, accel, speed, retract_dist, retract_speed, num_samples, tolerance, max_retries, z_max, max_accel, current_threshold, 0, randomize)
-                result = self.start_touch_scan(gcmd, touch_settings, verbose)
+                result = self.start_threshold_scan(gcmd, touch_settings, verbose)
                 
                 samples = result["samples"]
                 standard_deviation = result["standard_deviation"]
@@ -710,7 +710,7 @@ class Scanner:
                 self.generate_graph_from_csv(csv_filename, gcmd, z_max, test_type="scan")
             
             
-    def start_touch_scan(self, gcmd, touch_settings, verbose):
+    def start_threshold_scan(self, gcmd, touch_settings, verbose):
         kinematics = self.toolhead.get_kinematics()
         initial_position = touch_settings.initial_position
         homing_position = touch_settings.homing_position
