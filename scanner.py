@@ -84,7 +84,8 @@ class Scanner:
         self.lift_speed = config.getfloat("lift_speed", self.speed, above=0.0)
         self.backlash_comp = config.getfloat("backlash_comp", 0.5)
         
-        self.calibration_method = config.get("mode", "scan")
+        self.calibration_method = config.get("mode", config.get("calibration_method", "scan"))
+        
             
         if config.get("temp_sensor_override", None):
             self.thermistor_override = config.printer.load_object(config, "temperature_sensor " + config.get("temp_sensor_override"))
