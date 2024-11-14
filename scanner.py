@@ -326,20 +326,20 @@ class Scanner:
             self._start_calibration(gcmd)
             
     def _get_common_variables(self, gcmd):
-    return {
-        "speed": gcmd.get_float("SPEED", self.scanner_touch_config['speed'], above=0, maxval=self.scanner_touch_config['max_speed']),
-        "move_speed": gcmd.get_float("MOVEMENT_SPEED", self.scanner_touch_config['move_speed'], above=0),
-        "accel": gcmd.get_float("ACCEL", self.scanner_touch_config['accel'], minval=1),
-        "retract_dist": gcmd.get_float("RETRACT", self.scanner_touch_config['retract_dist'], minval=1),
-        "retract_speed": gcmd.get_float("RETRACT_SPEED", self.scanner_touch_config['retract_speed'], minval=1),
-        "num_samples": gcmd.get_int("SAMPLES", self.scanner_touch_config['sample_count'], minval=1),
-        "tolerance": round(gcmd.get_float("TOLERANCE", self.scanner_touch_config['tolerance'], above=0.0), 4),
-        "max_retries": gcmd.get_float("RETRIES", self.scanner_touch_config['max_retries'], minval=0),
-        "touch_location_x": gcmd.get_float("TOUCH_LOCATION_X", float(self.touch_location[0])),
-        "touch_location_y": gcmd.get_float("TOUCH_LOCATION_Y", float(self.touch_location[1])),
-        "randomize": gcmd.get_float("MOVE", 0, maxval=10),
-        "verbose": gcmd.get_int("DEBUG", 0)
-    }                            
+        return {
+            "speed": gcmd.get_float("SPEED", self.scanner_touch_config['speed'], above=0, maxval=self.scanner_touch_config['max_speed']),
+            "move_speed": gcmd.get_float("MOVEMENT_SPEED", self.scanner_touch_config['move_speed'], above=0),
+            "accel": gcmd.get_float("ACCEL", self.scanner_touch_config['accel'], minval=1),
+            "retract_dist": gcmd.get_float("RETRACT", self.scanner_touch_config['retract_dist'], minval=1),
+            "retract_speed": gcmd.get_float("RETRACT_SPEED", self.scanner_touch_config['retract_speed'], minval=1),
+            "num_samples": gcmd.get_int("SAMPLES", self.scanner_touch_config['sample_count'], minval=1),
+            "tolerance": round(gcmd.get_float("TOLERANCE", self.scanner_touch_config['tolerance'], above=0.0), 4),
+            "max_retries": gcmd.get_float("RETRIES", self.scanner_touch_config['max_retries'], minval=0),
+            "touch_location_x": gcmd.get_float("TOUCH_LOCATION_X", float(self.touch_location[0])),
+            "touch_location_y": gcmd.get_float("TOUCH_LOCATION_Y", float(self.touch_location[1])),
+            "randomize": gcmd.get_float("MOVE", 0, maxval=10),
+            "verbose": gcmd.get_int("DEBUG", 0)
+        }                            
     cmd_SCANNER_TOUCH_help = "Home in TOUCH mode"
     def cmd_SCANNER_TOUCH(self, gcmd):
         # Retrieve common variables
