@@ -433,7 +433,7 @@ class Scanner:
                 final_position[2] -= manual_z_offset
                 self.log_debug_info(vars["verbose"], gcmd, f"Touch procedure successful with {int(retries)} retries.")
                 self.log_debug_info(vars["verbose"], gcmd, f"Final position: {final_position}")
-                gcmd.respond_info(f"Standard Deviation: {standard_deviation:.4f}")
+                self.log_debug_info(vars["verbose"], gcmd, f"Standard Deviation: {standard_deviation:.4f}")
                 if calibrate == 1:
                     self._calibrate(gcmd, final_position, final_position[2], True, True, False)
             else:
@@ -467,13 +467,19 @@ class Scanner:
             self.toolhead.set_position(initial_position, [2])
             
             retries = 0
-            gcmd.respond_info("Initiating Touch Procedure...")
+            self.log_debug_info(verbose, gcmd, f"Initiating Touch Procedure...")
             new_retry = 0
             samples = []
             
+            has_shown_retry_info = False  # Initialize the flag
+            
             while len(samples) < num_samples:
                 if retries > 0:
-                    gcmd.respond_info(f"Retry Attempt {int(retries)}")
+                    # Only show the retry attempt message once per retry cycle
+                    if not has_shown_retry_info:
+                        gcmd.respond_info(f"Retry Attempt {int(retries)}")
+                        has_shown_retry_info = True  # Set flag to True after showing the message
+
                     if randomize > 0 and new_retry == 1:
                         # Generate random offsets within ±5 units for both x and y
                         x_offset = random.uniform(-randomize, randomize)
@@ -513,7 +519,7 @@ class Scanner:
                 self.toolhead.dwell(1.0)
                 
                 samples.append(probe_position[2])
-                gcmd.respond_info(f"Touch {len(samples)} result: {probe_position[2]:.4f}")
+                self.log_debug_info(verbose, gcmd, f"Touch {len(samples)} result: {probe_position[2]:.4f}")
                 self.log_debug_info(verbose, gcmd, f"Reset Acceleration to: {int(max_accel)}")
                 
                 average = np.mean(samples)
@@ -528,6 +534,7 @@ class Scanner:
                     retries += 1
                     new_retry = 1
                     samples.clear()
+                    has_shown_retry_info = False  # Reset the flag for the next retry cycle
                 self.log_debug_info(verbose, gcmd, f"Deviation: {deviation:.4f}\nNew Average: {average:.4f}\nTolerance: {tolerance:.4f}")
             
             std_dev = np.std(samples)
@@ -566,146 +573,173 @@ class Scanner:
     cmd_SCANNER_THRESHOLD_SCAN_help = "Scan THRESHOLD in TOUCH mode"
 
     def cmd_SCANNER_THRESHOLD_SCAN(self, gcmd):
-        # Retrieve common variables
-        vars = self._get_common_variables(gcmd)
-        
-        # Variables specific to the threshold scan command
-        threshold_min = gcmd.get_int("MIN", 500)
-        threshold_max = gcmd.get_int("MAX", 5000)
-        step = gcmd.get_int("STEP", 250)
-        override = gcmd.get_int("OVERRIDE", 0)
+        """Initiate threshold scanning to find the optimal threshold for accurate touch detection."""
 
-        # Debugging information
-        self.log_debug_info(vars["verbose"], gcmd,
-            f"SPEED: {vars['speed']}",
-            f"MOVEMENT_SPEED: {vars['move_speed']}",
-            f"ACCEL: {vars['accel']}",
-            f"RETRACT: {vars['retract_dist']}",
-            f"RETRACT_SPEED: {vars['retract_speed']}",
-            f"SAMPLES: {vars['num_samples']}",
-            f"TOLERANCE: {vars['tolerance']}",
-            f"RETRIES: {vars['max_retries']}",
-            f"TOUCH_LOCATION_X: {vars['touch_location_x']}",
-            f"TOUCH_LOCATION_Y: {vars['touch_location_y']}",
-            f"THRESHOLD MIN: {threshold_min}",
-            f"THRESHOLD MAX: {threshold_max}",
-            f"STEP: {step}",
-            f"DEBUG: {vars['verbose']}",
-            f"OVERRIDE: {override}",
-            f"MOVE: {vars['randomize']}"
-        )
-        
-        # Prepare for CSV logging and graphing
-        if verbose == 1:
-            csv_filename = f"/tmp/scanner_touch_scan_{time.strftime('%Y%m%d_%H%M%S')}.csv"
-            csvfile = open(csv_filename, "w", newline='')
-            csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(["Sample Number", "Position (Z)", "Time (s)", "Threshold"])
-            sample_number = 0
-        
-        # Switch between Touch and Scan
+        # Ensure trigger_method is set for touch calibration
         if self.calibration_method == "touch":
             self.trigger_method = 1
         else:
             self.trigger_method = 0
             return
+
+        # Retrieve common and specific threshold scan variables
+        vars = self._get_common_variables(gcmd)
         
+        # Retrieve STEP value once
+        step = gcmd.get_int("STEP", 250)
+        user_defined_min = gcmd.get_int("MIN", None, minval=0)
+        
+        if user_defined_min is None:
+            threshold_min = max(750, round((self.detect_threshold_z * 0.25) / 250) * 250)
+        else:
+            threshold_min = user_defined_min
+            
+        threshold_max = gcmd.get_int("MAX", None, maxval=5000)
+        if threshold_max is None:
+            threshold_max = threshold_min + (10 * step)
+            
+        override = gcmd.get_int("OVERRIDE", 0)
+        
+        
+
+        confirmation_retries = gcmd.get_int("CONFIRMATION_RETRIES", 5)  # Number of consistent retries for a good candidate
+        repeat_attempts = gcmd.get_int("REPEAT_ATTEMPTS", 3)  # Define repeat attempts for consistency check
+        
+        # Define what qualifies as a "good" result
+        max_acceptable_retries = 3
+        max_acceptable_std_dev = 0.015  # Adjust as needed for your application
+
+        verbose = vars["verbose"]
+        csv_filename = f"/tmp/scanner_touch_scan_{time.strftime('%Y%m%d_%H%M%S')}.csv" if verbose == 1 else None
+        
+         # Prepare to track results
+        results = []
+        has_increased_threshold_max = False  # Flag to track if threshold_max has been increased
+    
+        
+        # Proceed with threshold scanning
         self.check_temp(gcmd)
-        self.log_debug_info(verbose, gcmd, f"Trigger Method: {self.trigger_method}")
-        
         self.toolhead.wait_moves()
-        
+
+        # Ensure XY homing
         curtime = self.printer.get_reactor().monotonic()
         kinematics = self.toolhead.get_kinematics()
         kin_status = kinematics.get_status(curtime)
         if "x" not in kin_status["homed_axes"] or "y" not in kin_status["homed_axes"]:
             self.trigger_method = 0
             raise gcmd.error("Must home X and Y axes first")
-        
+
+        # Set initial scan values
         self.previous_probe_success = 0
-        self.gcode.run_script_from_command("G28 Z")  # Home Z axis
-        self._move([touch_location_x, touch_location_y, None], move_speed)
-        
-        original_trigger_method = self.trigger_method
-        original_threshold = self.detect_threshold_z
         current_threshold = threshold_min
-        best_threshold = None
-        best_threshold_range = float("inf")
-        self.toolhead.wait_moves()
-        self.check_temp(gcmd)
+        retries, attempts = 0, 0
         
-        start_time = time.time()
         try:
+            start_position = kin_status["axis_maximum"][2]
             initial_position = self.toolhead.get_position()[:]
             homing_position = initial_position[:]
-            z_min, z_max = kin_status["axis_minimum"][2], kin_status["axis_maximum"][2]
-            
-            self.log_debug_info(verbose, gcmd, f"Initial Pos: {initial_position} \nHoming Pos: {homing_position} \nZ MIN: {z_min} \nZ MAX: {z_max}")
-            
-            initial_position[2] = z_max
-            homing_position[2] = z_min
-            self.log_debug_info(verbose, gcmd, f"new Initial Pos [Initial Z - Z Max]: {initial_position} \nnew Homing Pos [Homing Pos - Z Min]: {homing_position}")
-            samples = []
-
+            initial_position[2], homing_position[2] = start_position, kin_status["axis_minimum"][2]
             max_accel = self.toolhead.get_status(curtime)["max_accel"]
-            self.log_debug_info(verbose, gcmd, f"Current Accel: {int(max_accel)}")
-            
-             # Run start_touch_scan once and ignore the results
-            gcmd.respond_info("Running initial touch scan (results ignored)...")
-            touch_settings = TouchSettings(initial_position, homing_position, accel, speed, retract_dist, retract_speed, 1, tolerance, 1, z_max, max_accel, threshold_min, 0, randomize)
-            _ = self.start_threshold_scan(gcmd, touch_settings, 0)  # Discard results
-            
-            start_position = z_max
-            
+
+            # CSV setup if verbose
+            if verbose == 1:
+                with open(csv_filename, "w", newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile)
+                    csvwriter.writerow(["Sample Number", "Position (Z)", "Time (s)", "Threshold"])
+
+            # Threshold scanning loop
             while current_threshold <= threshold_max:
                 gcmd.respond_info(f"Testing Threshold value {current_threshold}...")
                 self.detect_threshold_z = current_threshold
-                
-                touch_settings = TouchSettings(initial_position, homing_position, accel, speed, retract_dist, retract_speed, num_samples, tolerance, max_retries, z_max, max_accel, current_threshold, 0, randomize)
-                result = self.start_threshold_scan(gcmd, touch_settings, verbose)
-                
-                samples = result["samples"]
-                standard_deviation = result["standard_deviation"]
-                final_position = result["final_position"]
-                retries = result["retries"]
-                success = result["success"]
-                if verbose == 1:
-                    for pos in result['samples']:
-                        sample_number += 1
-                        elapsed_time = time.time() - start_time
-                        relative_position = -(start_position - pos)  # Convert to negative movement from start
-                        csvwriter.writerow([sample_number, relative_position, elapsed_time, current_threshold])
-            
- 
-                if success:
-                    self.log_debug_info(verbose, gcmd, f"Touch procedure successful with {int(retries)} retries.")
-                    self.log_debug_info(verbose, gcmd, f"Final position: {final_position}")
-                    if standard_deviation is not None:
-                        gcmd.respond_info(f"Standard Deviation: {standard_deviation:.4f}")
-                    else:
-                        gcmd.respond_info("Standard Deviation could not be calculated.")
-        
-                    gcmd.respond_info(f"Threshold Found: {current_threshold}")
-                    # Set the best threshold and break out of the loop
-                    if override == 0:
-                        self._save_threshold(current_threshold)
-                        gcmd.respond_info("Run SAVE_CONFIG to save this to your printer.cfg and restart")
-                        break
 
+                touch_settings = TouchSettings(
+                    initial_position, homing_position, vars["accel"], vars["speed"],
+                    vars["retract_dist"], vars["retract_speed"], vars["num_samples"], vars["tolerance"],
+                    confirmation_retries, start_position, max_accel, current_threshold, 0, vars["randomize"]
+                )
+
+                # Start threshold scan and evaluate results
+                result = self.start_threshold_scan(gcmd, touch_settings, verbose)
+                result["threshold"] = current_threshold  # Add threshold value to result for tracking
+                results.append(result)  # Append the result for later comparison
+                
+                if result["success"]:
+                    
+                    # Check if this result meets "good" criteria
+                    if result["retries"] <= max_acceptable_retries and \
+                       (result["standard_deviation"] is not None and result["standard_deviation"] <= max_acceptable_std_dev):
+                        # Increase threshold_max by 3 steps above the current threshold, only if it hasn't been increased before
+                        if not has_increased_threshold_max:
+                            threshold_max = current_threshold + 5 * step
+                            has_increased_threshold_max = True  # Set the flag to True after increasing
+                            gcmd.respond_info(f"Good Threshold Found: {current_threshold}. Adjusting threshold_max to {threshold_max}")
+
+                        
+                        # Run repeatability check with this threshold
+                        consistent_results = True
+                        for attempt in range(repeat_attempts):
+                            repeat_result = self.start_threshold_scan(gcmd, touch_settings, verbose)
+                            if not repeat_result["success"] or (repeat_result["standard_deviation"] > max_acceptable_std_dev):
+                                gcmd.respond_info(f"Repeat attempt {attempt + 1} failed for threshold {current_threshold}")
+                                consistent_results = False
+                                break
+                            gcmd.respond_info(f"Repeat attempt {attempt + 1} successful with std dev: {repeat_result['standard_deviation']:.5f}")
+
+                        # Save only successful repeat attempts in results
+                        result["consistent_results"] = consistent_results  # Mark if it passed repeatability checks
+                        result["standard_deviation"] = repeat_result["standard_deviation"] if consistent_results else None
+                        result["success"] = repeat_result["success"] if consistent_results else False
+                        results.append(result)  # Append the result for later comparison
+                        # If all repeat attempts succeeded, save the threshold
+                        if consistent_results and override == 0:
+                            best_threshold = current_threshold
+                            self._save_threshold(best_threshold)
+                            gcmd.respond_info(f"Confirmed Optimal Threshold Found: {best_threshold}")
+                            break
+                # Move to the next candidate if current threshold didn't succeed
                 current_threshold += step
+
         finally:
-            if verbose == 1:
-                csvfile.close()
             self._zhop()
-            if best_threshold is not None:
-                self.detect_threshold_z = best_threshold
-            else:
-                self.detect_threshold_z = original_threshold
-            self.trigger_method = original_trigger_method
-            self.set_accel(max_accel)    
-            if verbose == 1:
-                self.generate_graph_from_csv(csv_filename, gcmd, z_max, test_type="scan")
             
+           # In the finally block, filter for consistent results only
+            consistent_results = [r for r in results if r.get("consistent_results", False)]
+
+            # Check if there are any results at all
+            if not results or all(not r["success"] for r in results):
+                # If no thresholds passed the scan at all
+                gcmd.respond_info("No suitable threshold was found during the scan.")
+                return  # Exit as there's no best threshold to save
+
+            if consistent_results:
+                # Find the best consistent result based on minimum retries and standard deviation
+                best_result = min(consistent_results, key=lambda x: (x["retries"], x["standard_deviation"] if x["standard_deviation"] is not None else float("inf")))
+                best_threshold = best_result["threshold"]
+                optimal_found = True
+            else:
+                # Fallback if no consistent results were found, pick the best among all results
+                best_result = min(results, key=lambda x: (x["retries"], x["standard_deviation"] if x["standard_deviation"] is not None else float("inf")))
+                best_threshold = best_result["threshold"]
+                optimal_found = False
+                
+            # Save and respond with the best threshold found
+            self.detect_threshold_z = best_threshold
+            self._save_threshold(best_threshold)
+
+            # Handle None for standard deviation by using a default message
+            std_dev_display = f"{best_result['standard_deviation']:.5f}" if best_result["standard_deviation"] is not None else "N/A"
+
+            # Inform the user about the result
+            if optimal_found:
+                gcmd.respond_info(f"Optimal Threshold Determined: {best_threshold} with {best_result['retries']} retries and standard deviation of {std_dev_display}")
+            else:
+                gcmd.respond_info(f"No fully optimal threshold found. Best attempt: {best_threshold} with {best_result['retries']} retries and standard deviation of {std_dev_display}")
+            gcmd.respond_info(f"You can now SAVE_CONFIG to save your threshold.")
+            
+            self.trigger_method = 0
+            if verbose == 1:
+                self.generate_graph_from_csv(csv_filename, gcmd, start_position, test_type="scan")
+
             
     def start_threshold_scan(self, gcmd, touch_settings, verbose):
         kinematics = self.toolhead.get_kinematics()
@@ -735,13 +769,19 @@ class Scanner:
             
             samples = []
             success = False
+            has_shown_retry_info = False  # Initialize the flag
+            
+  
             while len(samples) < num_samples:
                 
                 if retries >= max_retries:
                     gcmd.respond_info(f"Exceeded maximum retries [{retries}/{int(max_retries)}]")
                     break  # Exit the loop and move to the next threshold
                 if retries > 0:
-                    gcmd.respond_info(f"Retry Attempt {int(retries)}")
+                    if not has_shown_retry_info:
+                        gcmd.respond_info(f"Retry Attempt {int(retries)}")
+                        has_shown_retry_info = True  # Set flag to True after showing the message
+
                     if randomize > 0 and new_retry == 1:
                         # Generate random offsets within ±5 units for both x and y
                         x_offset = random.uniform(-randomize, randomize)
@@ -780,7 +820,7 @@ class Scanner:
                 self.toolhead.dwell(1.0)
                 
                 samples.append(probe_position[2])
-                gcmd.respond_info(f"Touch {len(samples)} result: {probe_position[2]:.4f}")
+                self.log_debug_info(verbose, gcmd, f"Touch {len(samples)} result: {probe_position[2]:.4f}")
                 self.log_debug_info(verbose, gcmd, f"Reset Acceleration to: {int(max_accel)}")
                 
                 average = np.median(samples)
@@ -790,6 +830,7 @@ class Scanner:
                     gcmd.respond_info(f"Deviation of {deviation:.4f} exceeds tolerance of {tolerance:.4f}, retrying...")
                     retries += 1
                     samples.clear()
+                    has_shown_retry_info = True
                     # If successful, we continue gathering samples until num_samples is reached.
                 
                 self.log_debug_info(verbose, gcmd, f"Deviation: {deviation:.4f}\nNew Average: {average:.4f}\nTolerance: {tolerance:.4f}")
@@ -815,7 +856,8 @@ class Scanner:
                 "standard_deviation": std_dev,
                 "final_position": initial_position,
                 "retries": retries,
-                "success": success
+                "success": success,
+                "consistent_results": False  # Default to False
             }
         except self.printer.command_error:
             self.trigger_method = 0
