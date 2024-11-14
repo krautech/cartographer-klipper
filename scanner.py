@@ -283,31 +283,28 @@ class Scanner:
             if sensor:  # Ensure the sensor is not None
                 sensor_name = sensor.upper()
                 self.sensor_name = sensor_name
+                self.gcode.register_command(sensor_name + "_CALIBRATE", self.cmd_SCANNER_CALIBRATE,
+                                            desc=self.cmd_SCANNER_CALIBRATE_help)
+                self.gcode.register_command(sensor_name + "_TOUCH", self.cmd_SCANNER_TOUCH,
+                                            desc=self.cmd_SCANNER_TOUCH_help)
+                self.gcode.register_command(sensor_name + "_THRESHOLD_SCAN", self.cmd_SCANNER_THRESHOLD_SCAN,
+                                            desc=self.cmd_SCANNER_THRESHOLD_SCAN_help)
                 self.gcode.register_command(sensor_name + "_STREAM", self.cmd_SCANNER_STREAM,
                                             desc=self.cmd_SCANNER_STREAM_help)
                 self.gcode.register_command(sensor_name + "_QUERY", self.cmd_SCANNER_QUERY,
                                             desc=self.cmd_SCANNER_QUERY_help)
-                self.gcode.register_command(sensor_name + "_CALIBRATE", self.cmd_SCANNER_CALIBRATE,
-                                            desc=self.cmd_SCANNER_CALIBRATE_help)
-                self.gcode.register_command(sensor_name + "_THRESHOLD_SCAN", self.cmd_SCANNER_THRESHOLD_SCAN,
-                                            desc=self.cmd_SCANNER_THRESHOLD_SCAN_help)
                 self.gcode.register_command(sensor_name + "_ESTIMATE_BACKLASH", self.cmd_SCANNER_ESTIMATE_BACKLASH,
                                             desc=self.cmd_SCANNER_ESTIMATE_BACKLASH_help)
-                self.gcode.register_command(sensor_name + "_TOUCH", self.cmd_SCANNER_TOUCH,
-                                            desc=self.cmd_SCANNER_TOUCH_help)
+                
         self.gcode.register_command("PROBE", self.cmd_PROBE,
                                     desc=self.cmd_PROBE_help)
         self.gcode.register_command("PROBE_ACCURACY", self.cmd_PROBE_ACCURACY,
                                     desc=self.cmd_PROBE_ACCURACY_help)
-        self.gcode.register_command('PROBE_CALIBRATE', self.cmd_PROBE_CALIBRATE,
-                                    desc=self.cmd_PROBE_CALIBRATE_help)
         self.gcode.register_command('PROBE_SWITCH', self.cmd_PROBE_SWITCH,
                                     desc=self.cmd_PROBE_SWITCH_help)
-        self.gcode.register_command("Z_OFFSET_APPLY_PROBE",
-                                    self.cmd_Z_OFFSET_APPLY_PROBE,
+        self.gcode.register_command("Z_OFFSET_APPLY_PROBE", self.cmd_Z_OFFSET_APPLY_PROBE,
                                     desc=self.cmd_Z_OFFSET_APPLY_PROBE_help)
-        self.gcode.register_command("SAVE_TOUCH_OFFSET",
-                                    self.cmd_SAVE_TOUCH_OFFSET,
+        self.gcode.register_command("SAVE_TOUCH_OFFSET", self.cmd_SAVE_TOUCH_OFFSET,
                                     desc=self.cmd_SAVE_TOUCH_OFFSET_help)
                                     
     cmd_SCANNER_CALIBRATE_help = "Calibrate scanner response curve"
@@ -995,50 +992,6 @@ class Scanner:
             return self._calc_median(positions)
         return self._calc_mean(positions)
 
-    def probe_calibrate_finalize(self, kin_pos):
-        if kin_pos is None:
-            return
-        z_offset = kin_pos[2] - self.probe_calibrate_z
-        self.model.offset = self.model.offset + z_offset
-        pos = self.toolhead.get_position()
-        pos[2] = pos[2] - z_offset
-        self.toolhead.set_position(pos)
-        configfile = self.printer.lookup_object('configfile')
-        configfile.set("scanner model " + self.model.name, 'model_offset', "%.3f" % (self.model.offset))
-        
-    cmd_PROBE_CALIBRATE_help = "Calibrate the probe's z_offset"
-    def cmd_PROBE_CALIBRATE(self, gcmd):
-        if gcmd.get("METHOD","MANUAL").lower() == "auto":
-            touch_location_x = gcmd.get_float("TOUCH_LOCATION_X", float(self.touch_location[0]))
-            touch_location_y = gcmd.get_float("TOUCH_LOCATION_Y", float(self.touch_location[1]))
-            if self.calibration_method == "touch":
-                self.trigger_method = 1
-            else:
-                return
-            #self.gcode.run_script_from_command("G28 Z")
-            self._move([touch_location_x, touch_location_y, None], 40)
-            curpos = self.run_touch_probe(gcmd)
-            gcode_move = self.printer.lookup_object("gcode_move")
-            self.check_temp(gcmd)
-            offset = gcode_move.get_status()["homing_origin"].z
-            self.probe_calibrate_z = offset - curpos[2]
-            self.probe_calibrate_finalize([0,0,self.offset['z']])
-            self.trigger_method = 0
-            self._zhop()
-            return
-        self.trigger_method = 0
-        manual_probe.verify_no_manual_probe(self.printer)
-        lift_speed = self.get_lift_speed(gcmd)
-        # Perform initial probe
-        curpos = self.run_probe(gcmd)
-        self.probe_calibrate_z = curpos[2] - self.trigger_distance
-        # Move the nozzle over the probe point
-        curpos[0] += self.offset['x']
-        curpos[1] += self.offset['y']
-        self._move(curpos, self.speed)
-        # Start manual probe
-        manual_probe.ManualProbeHelper(self.printer, gcmd,
-                                       self.probe_calibrate_finalize)
     def set_accel(self, value):
         self.gcode.run_script_from_command("SET_VELOCITY_LIMIT ACCEL=%.3f" % (value,))
         
