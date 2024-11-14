@@ -331,6 +331,7 @@ class Scanner:
             "retract_speed": gcmd.get_float("RETRACT_SPEED", self.scanner_touch_config['retract_speed'], minval=1),
             "num_samples": gcmd.get_int("SAMPLES", self.scanner_touch_config['sample_count'], minval=1),
             "tolerance": round(gcmd.get_float("TOLERANCE", self.scanner_touch_config['tolerance'], above=0.0), 4),
+            "target": gcmd.get_float("TARGET", 0.015, above=0.0),  # Default target to 0.015 if not defined
             "max_retries": gcmd.get_float("RETRIES", self.scanner_touch_config['max_retries'], minval=0),
             "touch_location_x": gcmd.get_float("TOUCH_LOCATION_X", float(self.touch_location[0])),
             "touch_location_y": gcmd.get_float("TOUCH_LOCATION_Y", float(self.touch_location[1])),
@@ -600,14 +601,12 @@ class Scanner:
             
         override = gcmd.get_int("OVERRIDE", 0)
         
-        
-
-        confirmation_retries = gcmd.get_int("CONFIRMATION_RETRIES", 5)  # Number of consistent retries for a good candidate
-        repeat_attempts = gcmd.get_int("REPEAT_ATTEMPTS", 3)  # Define repeat attempts for consistency check
+        confirmation_retries = gcmd.get_int("QUALIFY_SAMPLES", 5)  # Number of consistent retries for a good candidate
+        repeat_attempts = gcmd.get_int("VERIFY_SAMPLES", 3)  # Define repeat attempts for consistency check
         
         # Define what qualifies as a "good" result
         max_acceptable_retries = 3
-        max_acceptable_std_dev = 0.015  # Adjust as needed for your application
+        max_acceptable_std_dev = vars["target"]
 
         verbose = vars["verbose"]
         csv_filename = f"/tmp/scanner_touch_scan_{time.strftime('%Y%m%d_%H%M%S')}.csv" if verbose == 1 else None
