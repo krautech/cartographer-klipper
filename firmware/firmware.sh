@@ -77,7 +77,7 @@ printf "${BLUE}
   \____|  \__,_| |_|     \__|  \___/   \__, | |_|     \__,_| | .__/  |_| |_|  \___| |_|   
                                        |___/                 |_|                          
 ${NC}"
-printf "${RED}Firmware Script ${NC} v1.1.0\n"
+printf "${RED}Firmware Script ${NC} v1.1.1\n"
 printf "Created by ${GREEN}KrauTech${NC} ${BLUE}(https://github.com/krautech)${NC}\n"
 echo
 echo
